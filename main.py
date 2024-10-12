@@ -21,7 +21,7 @@ if len(sys.argv) != 4:
 
 countryCode = sys.argv[1]
 query = sys.argv[2]
-ads_to_fetch = sys.argv[3]
+ads_to_fetch = int(sys.argv[3])
 prev_ads_fetched = 0
 total_ads_fetched = 0
 base_url = f"https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country={countryCode}&media_type=all&q={query}&search_type=keyword_unordered"
