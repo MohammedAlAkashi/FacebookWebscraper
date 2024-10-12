@@ -3,10 +3,10 @@ import re
 import requests
 import json
 import csv
+import sys
 
 import pandas as pd
 import selenium.common
-from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -15,9 +15,13 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-countryCode = 'US'
-query = 'housing'
-ads_to_fetch = 10
+if len(sys.argv) != 4:
+    print("Usage: python main.py <countryCode> <query> <amount_of_ads_to_fetch>")
+    exit(1)
+
+countryCode = sys.argv[1]
+query = sys.argv[2]
+ads_to_fetch = sys.argv[3]
 prev_ads_fetched = 0
 total_ads_fetched = 0
 base_url = f"https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country={countryCode}&media_type=all&q={query}&search_type=keyword_unordered"
