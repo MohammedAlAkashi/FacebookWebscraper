@@ -12,7 +12,7 @@ Have Python installed
 Install the needed packages (ex: requests) - see requirements.txt for details on what to install
 Run the code and type in what your looking for and what region (ex CA, US, MX: CA for Canada, US for USA, and MX for mexico)<br/>
 Usage: python main.py <countryCode> <query> <amount_of_ads_to_fetch><br/>
-Example: python main.py US "Housing in New York" 1250
+Example: python main.py US "Housing in New York" 1250<br/>
 [Full list of country codes](https://www.iban.com/country-codes)
 
 
