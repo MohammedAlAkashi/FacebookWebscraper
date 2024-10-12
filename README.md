@@ -10,9 +10,9 @@ https://github.com/user-attachments/assets/9450f465-ddd7-4308-9c47-480f4d0ee279
 ## Usage
 Have Python installed
 Install the needed packages (ex: requests) - see requirements.txt for details on what to install
-Run the code and type in what your looking for and what region (ex CA, US, MX: CA for Canada, US for USA, and MX for mexico)<br/>
+Run the code and type in what your looking for and what region (ex CA, US, MX: CA for Canada, US for USA, and MX for mexico)<br/><br/>
 Usage: python main.py <countryCode> <query> <amount_of_ads_to_fetch><br/>
-Example: python main.py US "Housing in New York" 1250<br/>
+Example: python main.py US "Housing in New York" 1250<br/><br/>
 [Full list of country codes](https://www.iban.com/country-codes)
 
 
