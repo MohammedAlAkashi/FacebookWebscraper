@@ -1,8 +1,9 @@
 # FacebookWebscraper
-Python script desinged to scrape facebook ads using the facebook.com/ads/library/ url, extracts data of the person who posted the ad and saves the data in a txt file
-corrosponding to what you searched for (ex: real estate, you will find the output of the data in the realestate.txt file that was made.)
+Python script desinged to scrape facebook ads using the facebook.com/ads/library/ url, extracts data of the person who posted the ad and saves the data in a excel file
+corrosponding to what you searched for (ex: real estate, you will find the output of the data in the realestate.xlsx file that was made.)
 
 ## SHOWCASE
+# REDACTED, OLD FOOTAGE
 https://github.com/Mohammed8339/FacebookWebscraper/assets/49081161/3bdd66ab-6c74-4fb4-86e7-06bb0369fdf5
 
 ## Usage
