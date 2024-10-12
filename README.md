@@ -13,5 +13,5 @@ Run the code and type in what your looking for and what region (ex CA, US, MX: C
 [Full list of country codes](https://www.iban.com/country-codes)
 
 ## License
-This project is licensed under the [MIT License](https://github.com/Mohammed8339/CipherMate/blob/main/LICENSE) - see the LICENSE file for details
+This project is licensed under the [Creative Commons Zero v1.0 Universal LICENSE](https://github.com/Mohammed8339/CipherMate/blob/main/LICENSE) - see the LICENSE file for details
 
