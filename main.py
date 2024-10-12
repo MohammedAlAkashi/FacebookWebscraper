@@ -1,325 +1,261 @@
 import os
 import re
-import time
 import requests
-import threading
+import json
+import csv
+
+import pandas as pd
+import selenium.common
 from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
-session_id = ""
-getFaceBookUrls = ""
-facebookURLS = []
-isCounting = True
-count = 0
+countryCode = 'US'
+query = 'housing'
+ads_to_fetch = 10
+prev_ads_fetched = 0
+total_ads_fetched = 0
+base_url = f"https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country={countryCode}&media_type=all&q={query}&search_type=keyword_unordered"
 
 
-def getSessionID(word, country):
-    print("getting SessionID")
+driver_path = 'chromedriver-win32/chromedriver.exe'
+options = Options()
+# options.add_argument("--headless=new")
+# options.add_argument("--window-position=-2400,-2400")
+options.add_argument("--disable-gpu")
+options.add_argument("--no-sandbox")
 
-    global session_id
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
-    headers = {
-        'authority': 'www.facebook.com',
-        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'accept-language': 'en-GB,en;q=0.9,ar;q=0.8',
-        'cache-control': 'max-age=0',
-        'sec-ch-prefers-color-scheme': 'dark',
-        'sec-ch-ua': '"Not.A/Brand";v="8", "Chromium";v="114", "Google Chrome";v="114"',
-        'sec-ch-ua-full-version-list': '"Not.A/Brand";v="8.0.0.0", "Chromium";v="114.0.5735.199", "Google Chrome";v="114.0.5735.199"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"Windows"',
-        'sec-ch-ua-platform-version': '"15.0.0"',
-        'sec-fetch-dest': 'document',
-        'sec-fetch-mode': 'navigate',
-        'sec-fetch-site': 'same-origin',
-        'sec-fetch-user': '?1',
-        'upgrade-insecure-requests': '1',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
-                      'Chrome/114.0.0.0 Safari/537.36',
-        'viewport-width': '1243',
-    }
+try:
+    driver.get(base_url)
+    # prints html content of entire page
+    #print(driver.page_source)
+    # finds all the page IDS on page CURRENT page.
+    # regex pattern: "PERSON_PROFILE","page_id":"[0-9]{15}","page_is_deleted"
 
-    response = requests.get(
-        f'https://www.facebook.com/ads/library/?active_status=all&country={country}&q=%22{word}%22&sort_data[direction]=desc&sort_data[mode]=relevancy_monthly_grouped&search_type=keyword_exact_phrase&media_type=all',
-        headers=headers,
+    #page_ids = re.findall(r'"PERSON_PROFILE","page_id":"[0-9]{15}","page_is_deleted"', page_source)
+    # trimming the page_ids to only include the page_id
+    #page_ids = [re.search(r'[0-9]{15}', page_id).group() for page_id in page_ids]
+
+    element = WebDriverWait(driver, 10).until(
+       EC.presence_of_element_located((By.XPATH, '/html/body/div[1]/div/div/div/div/div/div/div[1]/div/div/div/div[4]/div[2]/div[2]/div[4]/div[1]'))
     )
 
-    response_text = response.text
-    start_index = response_text.find('"sessionId":"') + len('"sessionId":"')
-    end_index = response_text.find('"', start_index)
-    session_id = response_text[start_index:end_index]
+    total_ads_fetched = int(len(re.findall(r'<hr class="[a-z0-9\s]+">', element.get_attribute('innerHTML'))))
 
-    print(f'Session ID: {session_id}')
+    # keep scrolling until we have fetched the required number of ads
+    while ads_to_fetch >= total_ads_fetched:
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        element = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, '/html/body/div[1]/div/div/div/div/div/div/div[1]/div/div/div/div[4]/div[2]/div[2]/div[4]/div[1]'))
+        )
+        total_ads_fetched = int(len(re.findall(r'<hr class="[a-z0-9\s]+">', element.get_attribute('innerHTML'))))
+        if total_ads_fetched != prev_ads_fetched:
+            # don't print the same ads again
+            print(total_ads_fetched)
+            prev_ads_fetched = total_ads_fetched
 
-    return session_id
+    # ------------------------------------  MAIN PART  ---------------------------------------- #
 
+    page_source = driver.page_source
+    descriptions = re.findall(r'<div style="white-space: pre-wrap;">\s*<span>(.*?)</span>\s*</div>', page_source)
+    # remove html tags.
 
-def getFrontPageData():
-    print("getting front page data")
+    # clean up the descriptions
+    descriptions = [re.sub(r'(<div style="white-space: pre-wrap;">|<span>|</span>|</div>)', '', description) for description in descriptions]
+    descriptions = [re.sub(r'&amp;', '&', description) for description in descriptions]
+    descriptions = [re.sub(r'&quot;', '"', description) for description in descriptions]
+    descriptions = [re.sub(r'&gt;', '>', description) for description in descriptions]
+    descriptions = [re.sub(r'&lt;', '<', description) for description in descriptions]
+    descriptions = [re.sub(r'&nbsp;', ' ', description) for description in descriptions]
+    descriptions = [re.sub(r'&apos;', "'", description) for description in descriptions]
+    descriptions = [re.sub(r'&cent;', '¢', description) for description in descriptions]
+    descriptions = [re.sub(r'&copy;', '©', description) for description in descriptions]
+    descriptions = [re.sub(r'&reg;', '®', description) for description in descriptions]
+    descriptions = [re.sub(r'&trade;', '™', description) for description in descriptions]
+    descriptions = [re.sub(r'&euro;', '€', description) for description in descriptions]
+    descriptions = [re.sub(r'&pound;', '£', description) for description in descriptions]
+    descriptions = [re.sub(r'&yen;', '¥', description) for description in descriptions]
+    descriptions = [re.sub(r'&mdash;', '—', description) for description in descriptions]
+    descriptions = [re.sub(r'&ndash;', '–', description) for description in descriptions]
+    descriptions = [re.sub(r'<br>', '\n', description) for description in descriptions]
+    descriptions = ['N/A' if description == '' else description for description in descriptions]
 
-    global getFaceBookUrls
-    # cookies = {
-    #     'sb': 'wF36Y4r2DrRKF3UAUfUi7xNV',
-    #     'datr': 'wF36Ywi-tOF78ZxsmzlL5jgC',
-    #     'c_user': '100080406882587',
-    #     'xs': '49%3A4R_E-wI7UXYlDw%3A2%3A1688605020%3A-1%3A15183',
-    #     'wd': '1243x961',
-    # }
-    #
-    # headers = {
-    #     'authority': 'www.facebook.com',
-    #     'accept': '*/*',
-    #     'accept-language': 'en-GB,en;q=0.9,ar;q=0.8',
-    #     'content-type': 'application/x-www-form-urlencoded',
-    #     'origin': 'https://www.facebook.com',
-    #     'sec-ch-prefers-color-scheme': 'dark',
-    #     'sec-ch-ua': '"Not.A/Brand";v="8", "Chromium";v="114", "Google Chrome";v="114"',
-    #     'sec-ch-ua-full-version-list': '"Not.A/Brand";v="8.0.0.0", "Chromium";v="114.0.5735.199", "Google '
-    #                                    'Chrome";v="114.0.5735.199"',
-    #     'sec-ch-ua-mobile': '?0',
-    #     'sec-ch-ua-platform': '"Windows"',
-    #     'sec-ch-ua-platform-version': '"15.0.0"',
-    #     'sec-fetch-dest': 'empty',
-    #     'sec-fetch-mode': 'cors',
-    #     'sec-fetch-site': 'same-origin',
-    #     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
-    #                   'Chrome/114.0.0.0 Safari/537.36',
-    #     'viewport-width': '1243',
-    #     'x-asbd-id': '129477',
-    # }
-    #
-    # data = {
-    #     '__a': '1',
-    #     '__req': '1',
-    #     '__hs': '19544.BP:DEFAULT.2.0..0.0',
-    #     'dpr': '1',
-    #     '__ccg': 'MODERATE',
-    #     '__csr': '',
-    #     'fb_dtsg': 'NAcPZTU4OY4nYl_63_Iq2Tfl8aoYbJJtx1RzZ9cqZaoOZ3FcQkFEzLQ:49:1688605020',
-    #     'jazoest': '25466',
-    #     'lsd': 'CWOZew8DEz5jZtCyx9jM5a',
-    #     '__spin_r': '1007793482',
-    #     '__spin_b': 'trunk',
-    #     '__spin_t': '1688608067',
-    #     '__jssesw': '1',
-    # }
-    #
-    # params = {
-    #     'countries[0]': country,
-    #     'count': '100',
-    #     'is_mobile': 'false',
-    #     'q': wordLookup,
-    #     'session_id': session_id,
-    #     'active_status': 'all',
-    #     'ad_type': 'all',
-    #     'media_type': 'all',
-    #     'sort_data[direction]': 'desc',
-    #     'sort_data[mode]': 'relevancy_monthly_grouped',
-    #     'search_type': 'keyword_unordered'
-    # }
-    #
-    # response = requests.post(
-    #     f'https://www.facebook.com/ads/library/async/search_ads/?q={wordLookup}&session_id={session_id}&count=100&active_status=all&ad_type=all&countries[0]={country}&media_type=all&sort_data[direction]=desc&sort_data[mode]=relevancy_monthly_grouped&search_type=keyword_unordered',
-    #     cookies=cookies,
-    #     headers=headers,
-    #     data=data,
-    #     params=params
-    # )
-    import requests
-
-    cookies = {
-        'datr': 'CAMCZeE7-YQj7QsVMgYWgWgi',
-        'sb': 'CAMCZSE0Pca1LqE_bXgJeiBU',
-        'fr': '0whW8Xs4vLLRNCnuK..BlAKp2.xS.AAA.0.0.BlAgML.AWXJffRsS6Q',
-        'wd': '982x739',
-    }
-
-    headers = {
-        'authority': 'www.facebook.com',
-        'accept': '*/*',
-        'accept-language': 'en-GB,en;q=0.9,ar;q=0.8',
-        'origin': 'https://www.facebook.com',
-        'sec-ch-ua': '"Chromium";v="116", "Not)A;Brand";v="24", "Google Chrome";v="116"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"Windows"',
-        'sec-fetch-dest': 'empty',
-        'sec-fetch-mode': 'cors',
-        'sec-fetch-site': 'same-origin',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36',
-        'x-asbd-id': '129477',
-        'x-fb-lsd': 'AVpgUcCSck8',
-    }
-
-    data = {
-        '__user': '0',
-        '__a': '1',
-        '__req': 'e',
-        '__hs': '19614.BP:DEFAULT.2.0..0.0',
-        'dpr': '1',
-        '__ccg': 'EXCELLENT',
-        '__rev': '1008635951',
-        '__s': 'qhgqx1:kkza3s:aluixq',
-        '__hsi': '7278712979755515907',
-        '__csr': '',
-        'lsd': 'AVpgUcCSck8',
-        'jazoest': '2962',
-        '__spin_r': '1008635951',
-        '__spin_b': 'trunk',
-        '__spin_t': '1694707428',
-        '__jssesw': '1',
-    }
-
-    response = requests.post(
-        f'https://www.facebook.com/ads/library/async/search_ads/?q={wordLookup}&session_id={session_id}&count=100&active_status=all&ad_type=all&countries[0]={country}&media_type=all&sort_data[direction]=desc&sort_data[mode]=relevancy_monthly_grouped&search_type=keyword_unordered',
-        cookies=cookies,
-        headers=headers,
-        data=data,
-    )
-
-    getFaceBookUrls = response.text
-
-    return response
+    CTA = re.findall(r'<div class=".{92}">([^<]*)</div>', page_source)
+    CTA = [re.sub(r'<div class=".{92}">', '', cta) for cta in CTA]
+    CTA = [re.sub(r'</div>', '', cta) for cta in CTA]
+    CTA.pop(0)
 
 
-def counting():
-    global isCounting
-    global count
+    page_ids = re.findall(r',"page_id":"[0-9]{15}","page_is_deleted"', page_source)
+    page_ids = [re.search(r'[0-9]{15}', page_id).group() for page_id in page_ids]
+    category = []
+    links = []
+    id_s = []
+    best_description = []
+    page_names = []
+    profile_links = []
 
-    while isCounting:
-        time.sleep(1)
-        os.system('cls')
-        print("getting SessionID")
-        print(f'Session ID: {session_id}')
-        print("getting front page data")
-        print("getting detailed data")
-        print("getting profile urls")
-        print('getting final data and saving it')
-        print(f'time elapsed: {count}')
-        count += 1
-        counting()
+    for ids in page_ids:
+        headers = {
+            'accept': '*/*',
+            'accept-language': 'en-US,en;q=0.9',
+            'content-type': 'application/x-www-form-urlencoded',
+            'origin': 'https://www.facebook.com',
+            'priority': 'u=1, i',
+            'referer': 'https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=all&q=housing&search_type=keyword_unordered',
+            'sec-ch-prefers-color-scheme': 'dark',
+            'sec-ch-ua': '"Google Chrome";v="129", "Not=A?Brand";v="8", "Chromium";v="129"',
+            'sec-ch-ua-full-version-list': '"Google Chrome";v="129.0.6668.90", "Not=A?Brand";v="8.0.0.0", "Chromium";v="129.0.6668.90"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-model': '""',
+            'sec-ch-ua-platform': '"Windows"',
+            'sec-ch-ua-platform-version': '"15.0.0"',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-origin',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+        }
 
+        data = {
+            'variables': '{"pageID":"' + ids + '"}',
+            'doc_id': '6453683764688391',
+        }
 
-def getDetailedData(content):
-    print("getting detailed data")
+        response = requests.post('https://www.facebook.com/api/graphql/', headers=headers, data=data)
 
-    global facebookURLS
+        # print(response.text)
 
-    urls = re.findall(r'"page_profile_uri":"([^"]+)"', content)
-
-    for uri in urls:
-        uri = str(uri).replace('\\', '')
-        if uri not in facebookURLS:
-            facebookURLS.append(uri)
-
-
-def getProfileURL(name):
-    print("getting profile urls")
-
-    global facebookURLS
-    global isCounting
-
-    cookies = {
-        'datr': 'CAMCZeE7-YQj7QsVMgYWgWgi',
-        'sb': 'CAMCZSE0Pca1LqE_bXgJeiBU',
-        'usida': 'eyJ2ZXIiOjEsImlkIjoiQXMwem55czFoem1icmciLCJ0aW1lIjoxNjk0NzE2OTQ4fQ%3D%3D',
-        'dpr': '1.25',
-        'fr': '0whW8Xs4vLLRNCnuK.AWWKi36XDne62fhZ3TG4kmxxkRA.BlAKp2.xS.AAA.0.0.BlA1SH.AWVwUwdr9r0',
-        'wd': '982x739',
-    }
-
-    headers = {
-        'authority': 'www.facebook.com',
-        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'accept-language': 'en-GB,en;q=0.9,ar;q=0.8',
-        'cache-control': 'max-age=0',
-        # 'cookie': 'datr=CAMCZeE7-YQj7QsVMgYWgWgi; sb=CAMCZSE0Pca1LqE_bXgJeiBU; usida=eyJ2ZXIiOjEsImlkIjoiQXMwem55czFoem1icmciLCJ0aW1lIjoxNjk0NzE2OTQ4fQ%3D%3D; dpr=1.25; fr=0whW8Xs4vLLRNCnuK.AWWKi36XDne62fhZ3TG4kmxxkRA.BlAKp2.xS.AAA.0.0.BlA1SH.AWVwUwdr9r0; wd=982x739',
-        'dpr': '1.25',
-        'referer': 'https://www.facebook.com/',
-        'sec-ch-prefers-color-scheme': 'dark',
-        'sec-ch-ua': '"Chromium";v="116", "Not)A;Brand";v="24", "Google Chrome";v="116"',
-        'sec-ch-ua-full-version-list': '"Chromium";v="116.0.5845.188", "Not)A;Brand";v="24.0.0.0", "Google Chrome";v="116.0.5845.188"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-model': '""',
-        'sec-ch-ua-platform': '"Windows"',
-        'sec-ch-ua-platform-version': '"15.0.0"',
-        'sec-fetch-dest': 'document',
-        'sec-fetch-mode': 'navigate',
-        'sec-fetch-site': 'same-origin',
-        'sec-fetch-user': '?1',
-        'upgrade-insecure-requests': '1',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36',
-        'viewport-width': '981',
-    }
-
-    print('getting final data and saving it')
-
-    # thread = threading.Thread(target=counting)
-    # thread.start()
-    dataFound = []
-    processedData = []
-    for profiles in facebookURLS:
-
-        profiles = str(profiles).replace('https://facebook.com/', '')
-        response = requests.get(f'https://www.facebook.com/{profiles}/about', cookies=cookies, headers=headers)
-        matches = re.findall(r'"field_section_type":"([^"]+)",.*?"text":"([^"]+)"', response.text)
-        # print(f'https://www.facebook.com/{profiles}/about')
-        # matchRefined = str(matches[2][1]).replace('\\u0040', '@').replace('\\u00b7', '-').replace('\\', '')
-        dataFound.append(matches)
-    for i in dataFound:
-        for j in i:
-            for k in j:
-                k = str(k.replace(r'\u0040', '@').replace(r'\u00b7', '-').replace('\\', ''))
-                processedData.append(k)
-    for i in processedData:
-        print(i)
+        compiled_data = json.loads(response.text)
+        category.append(compiled_data['data']['page']['category_name'])
+        links.append(compiled_data['data']['page']['websites'])
+        id_s.append(compiled_data['data']['page']['id'])
+        page_names.append(compiled_data['data']['page']['name'])
+        profile_links.append(compiled_data['data']['page']['url'])
 
 
-        with open(f'{name}.txt', 'a') as file:
-            for match in matches:
+        if compiled_data['data']['page']['best_description'] is not None:
+            best_description.append(compiled_data['data']['page']['best_description']['text'])
+        else:
+            best_description.append('N/A')
 
-                matchRefined = str(match[2][1]).replace('\\u0040', '@').replace('\\u00b7', '-').replace('\\', '')
-                soup = BeautifulSoup(response.text, 'html.parser')
-                print(matchRefined)
+    # fill the rest of the unfound descriptions with 'N/A'
+    while len(descriptions) < len(page_ids):
+        descriptions.append('N/A')
 
-                span_element = soup.find('span', string=match[1])
-                print(span_element)
+    # sessionID = re.findall(',"sessionID":".{36}","', page_source)
+    # sessionID = list(dict.fromkeys([re.search('".{36}"', sessionID).group() for sessionID in sessionID]))[0].replace('"', '')
 
-                if span_element:
-                    class_attribute = ' '.join(span_element.get('class'))
-                    print(class_attribute)
-
-                getAllData = soup.find_all('span', class_attribute)
-
-                for data in getAllData:
-                    refined = data.getText(strip=True)
-
-                    finalRefined = refined.replace('·', '-')
-
-                    if finalRefined not in dataFound:
-                        dataFound.append(str(finalRefined))
-
-                if matchRefined not in dataFound:
-                    dataFound.append(matchRefined)
-            print("size of array: " + len(dataFound))
-            for toWrite in dataFound:
-                file.write(toWrite + '\n')
-                file.flush()
-            file.write('\n')
-            file.flush()
-
-    isCounting = False
-    # thread.join()
+    # write the collected data to a csv file
+    with open('output.csv', 'w', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        writer.writerow(['ID', 'Category', 'Page Names', 'Description', 'Best Description', 'Link', 'CTA', 'Profile Link'])
+        for i in range(len(page_names)):
+            writer.writerow([id_s[i], category[i], page_names[i], descriptions[i], best_description[i], links[i], CTA[i]])
 
 
-if __name__ == '__main__':
-    wordLookup = input("Keyword: ")
-    country = input("Country: ")
+    # get the profile data
 
-    formattedWordLookup = wordLookup.replace(' ', '+')
-    country.replace(' ', '')
+    address = []
+    mobile_number = []
+    email = []
+    websites_and_social_links = []
+    index = 0
 
-    os.system('cls')
+    for profile_link in profile_links:
 
-    getSessionID(formattedWordLookup, country)
-    getFrontPageData()
-    getDetailedData(getFaceBookUrls)
-    getProfileURL(wordLookup)
+        # check to see if the profile link is a facebook marketplace link
+        if '/marketplace/profile/' in profile_link:
+            # skip this link
+            print(f"Skipping {profile_link} as it is a facebook marketplace link.")
+            continue
+
+        driver.get(f"{profile_link}/?sk=about")
+
+        # waits for data to load
+        loaded = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located(
+                (By.XPATH, '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div'
+                           '/div/div[4]/div/div/div/div[1]/div/div/div/div/div[2]/div/div/div'))
+        )
+
+        try:
+            address.append(driver.find_element(By.XPATH, '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]'
+                                                         '/div[1]/div/div/div[4]/div/div/div/div[1]/div/div/div/div'
+                                                         '/div[2]/div/div/div/div[2]/div/div[2]/div/div/div[2]/div[2]'
+                                                         '/div[1]/span').text)
+        except selenium.common.NoSuchElementException as e:
+            # address does not exist???
+            address.append("N/A")
+            pass
+
+        try:
+            mobile_number.append(driver.find_element(By.XPATH, '/html/body/div[1]/div/div[1]/div/div[3]/div/div'
+                                                               '/div[1]/div[1]/div/div/div[4]/div/div/div/div[1]/div'
+                                                               '/div/div/div/div[2]/div/div/div/div[2]/div/div[3]/div'
+                                                               '/div/div[2]/ul/li/div/div/div[1]/span').text)
+        except selenium.common.NoSuchElementException as e:
+            # mobile number does not exist???
+            mobile_number.append("N/A")
+            pass
+
+        try:
+            email.append(driver.find_element(By.XPATH, '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]'
+                                                       '/div[1]/div/div/div[4]/div/div/div/div[1]/div/div/div/div/div[2]'
+                                                       '/div/div/div/div[2]/div/div[4]/div/div/div[2]/ul/li/div/div'
+                                                       '/div[1]/span').text)
+        except selenium.common.NoSuchElementException as e:
+            # email does not exist???
+            email.append("N/A")
+            pass
+
+        try:
+            websites_and_social_links.append(driver.find_element(By.XPATH, '/html/body/div[1]/div/div[1]/div'
+                                                                           '/div[3]/div/div/div[1]/div[1]/div/div/div[4]'
+                                                                           '/div/div/div/div[1]/div/div/div/div/div[2]'
+                                                                           '/div/div/div/div[3]/div').text)
+        except selenium.common.NoSuchElementException as e:
+            # websites and social links do not exist???
+            websites_and_social_links.append("N/A")
+            pass
+
+        print(f"processed {profile_link} out of {index + 1} out of {len(profile_links)}")
+        index += 1
+
+    # Read the existing CSV file
+    existing_data = pd.read_csv('output.csv')
+
+    # Create a new DataFrame with the new data
+    new_data = pd.DataFrame({
+        'Profile Link': profile_links,
+        'Address': address,
+        'Mobile Number': mobile_number,
+        'Email': email,
+        'Websites and Social Links': websites_and_social_links
+    })
+
+    # Write both DataFrames to the same CSV file, each in a separate sheet
+    with pd.ExcelWriter('output_file.xlsx') as writer:
+        existing_data.to_excel(writer, sheet_name='Ad Info', index=False)
+        new_data.to_excel(writer, sheet_name='Account Info', index=False)
+
+    os.system("pause")
+
+
+except PermissionError as e:
+    print("Please close the csv file before running the script.")
+    print("An error occurred:", e)
+    driver.quit()
+    exit(1)
+except Exception as e:
+    print("An error occurred:", e)
+finally:
+    os.system('pause')
+    driver.quit()
+    exit(0)
