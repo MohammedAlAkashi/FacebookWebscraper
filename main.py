@@ -29,8 +29,8 @@ base_url = f"https://www.facebook.com/ads/library/?active_status=active&ad_type=
 
 driver_path = 'chromedriver-win32/chromedriver.exe'
 options = Options()
-# options.add_argument("--headless=new")
-# options.add_argument("--window-position=-2400,-2400")
+options.add_argument("--headless=new")
+options.add_argument("--window-position=-2400,-2400")
 options.add_argument("--disable-gpu")
 options.add_argument("--no-sandbox")
 
