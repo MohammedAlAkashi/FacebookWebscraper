@@ -21,5 +21,5 @@ Message me on [LinkedIn](https://www.linkedin.com/in/mohammed-a-1840b129b/)
 
 
 ## License
-This project is licensed under the [Creative Commons Zero v1.0 Universal LICENSE](https://github.com/Mohammed8339/CipherMate/blob/main/LICENSE) - see the LICENSE file for details
+This project is licensed under the [Creative Commons Zero v1.0 Universal LICENSE](https://github.com/MohammedAlAkashi/FacebookWebscraper/blob/main/LICENSE) - see the LICENSE file for details
 
